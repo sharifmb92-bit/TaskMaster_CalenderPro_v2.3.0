@@ -3,14 +3,9 @@
   "name": "TaskMaster Calendar Pro",
   "icons": [
     {
-      "src": "icon-192.png",
-      "type": "image/png",
-      "sizes": "192x192"
-    },
-    {
-      "src": "icon-512.png",
-      "type": "image/png",
-      "sizes": "512x512"
+      "src": "icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "512x512 192x192"
     }
   ],
   "start_url": "./index.html",
