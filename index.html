@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>TaskMaster Calendar Pro 2.3.0</title>
+    <title>TaskMaster Calendar Pro 2.4.0</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2b1810">
 
@@ -434,7 +434,7 @@
 
     <script>
         // medbasha
-        const config = { version: '2.3.0', sysSignature: 'medbasha' };
+        const config = { version: '2.4.0', sysSignature: 'medbasha' };
 
         let events = JSON.parse(localStorage.getItem('cal_events')) || [];
         let customLocations = JSON.parse(localStorage.getItem('custom_locations')) || { central: null, casa: null };
@@ -447,6 +447,9 @@
         let currentMonth = todayDate.getMonth();
         let selectedDateStr = '';
         let selectedPriority = 'low';
+
+        // Contexto de Audio Global para evitar bloqueos del navegador
+        let globalAudioCtx = null;
 
         // Variables del mapa Leaflet
         let leafletMap = null;
@@ -663,9 +666,14 @@
                 Notification.requestPermission().then(() => updatePermissionBanner());
             }
             try {
+                // Iniciar AudioGlobal en un evento de usuario real
                 const AudioContext = window.AudioContext || window.webkitAudioContext;
-                const ctx = new AudioContext();
-                ctx.resume();
+                if (!globalAudioCtx) {
+                    globalAudioCtx = new AudioContext();
+                }
+                if (globalAudioCtx.state === 'suspended') {
+                    globalAudioCtx.resume();
+                }
             } catch (e) {}
             if (navigator.vibrate) navigator.vibrate(100);
         }
@@ -862,20 +870,25 @@
         function playAlertSound() {
             if (!appSettings.sound) return;
             try {
-                const AudioContext = window.AudioContext || window.webkitAudioContext;
-                if (!AudioContext) return;
-                const ctx = new AudioContext();
+                if (!globalAudioCtx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    globalAudioCtx = new AudioContext();
+                }
+                if (globalAudioCtx.state === 'suspended') {
+                    globalAudioCtx.resume();
+                }
+                
                 const playBeep = (delay, frequency, duration) => {
-                    const osc = ctx.createOscillator();
-                    const gain = ctx.createGain();
+                    const osc = globalAudioCtx.createOscillator();
+                    const gain = globalAudioCtx.createGain();
                     osc.type = 'sine';
-                    osc.frequency.setValueAtTime(frequency, ctx.currentTime + delay);
-                    gain.gain.setValueAtTime(0.3, ctx.currentTime + delay);
-                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + delay + duration);
+                    osc.frequency.setValueAtTime(frequency, globalAudioCtx.currentTime + delay);
+                    gain.gain.setValueAtTime(0.3, globalAudioCtx.currentTime + delay);
+                    gain.gain.exponentialRampToValueAtTime(0.01, globalAudioCtx.currentTime + delay + duration);
                     osc.connect(gain);
-                    gain.connect(ctx.destination);
-                    osc.start(ctx.currentTime + delay);
-                    osc.stop(ctx.currentTime + delay + duration);
+                    gain.connect(globalAudioCtx.destination);
+                    osc.start(globalAudioCtx.currentTime + delay);
+                    osc.stop(globalAudioCtx.currentTime + delay + duration);
                 };
                 playBeep(0, 880, 0.15);
                 playBeep(0.2, 880, 0.25);
@@ -955,12 +968,17 @@
         function checkTimeAlarms() {
             const now = new Date();
             const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
-            const currentHHMM = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
 
             let changed = false;
             events.forEach(ev => {
-                if (ev.alarmFired || ev.time === '--:--') return;
-                if (ev.date === todayStr && ev.time === currentHHMM) {
+                if (ev.alarmFired || ev.time === '--:--' || ev.date !== todayStr) return;
+                
+                // LÓGICA CORREGIDA: Convertimos la hora a minutos para comparar de forma segura (>=)
+                const [evH, evM] = ev.time.split(':').map(Number);
+                const eventMinutes = evH * 60 + evM;
+                const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+                if (currentMinutes >= eventMinutes) {
                     triggerAlarm('TaskMaster', ev.title, 'time_' + ev.id);
                     ev.alarmFired = true;
                     changed = true;
