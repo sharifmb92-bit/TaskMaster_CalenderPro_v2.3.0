@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>TaskMaster Calendar Pro 2.3.0</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#2b1810">
+
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="TaskMaster">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <link rel="icon" href="icon-192.png">
+
+    <!-- Leaflet CSS para el Mapa Interactivo -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <style>
+        .theme-cafe {
+            --bg-main: #2b1810; --bg-card: #3d251c; --bg-input: #1f100a;
+            --text-main: #f5ebe6; --text-muted: #b59e93; --accent: #df9a57;
+        }
+        .theme-gris {
+            --bg-main: #1a1a1a; --bg-card: #2a2a2a; --bg-input: #111111;
+            --text-main: #ffffff; --text-muted: #888888; --accent: #707070;
+        }
+        .theme-marino {
+            --bg-main: #0f172a; --bg-card: #1e293b; --bg-input: #020617;
+            --text-main: #f8fafc; --text-muted: #94a3b8; --accent: #38bdf8;
+        }
+
+        :root {
+            --color-high: #cd4439;
+            --color-medium: #d48c3f;
+            --color-low: #7fa96e;
+            --color-event: #38bdf8;
+            --color-task: #7fa96e;
+            --color-note: #df9a57;
+        }
+
+        * {
+            box-sizing: border-box; margin: 0; padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background-color: var(--bg-main); color: var(--text-main);
+            padding: 16px; display: flex; justify-content: center; min-height: 100vh;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .app-container {
+            width: 100%; max-width: 480px; background: var(--bg-card);
+            border-radius: 24px; padding: 22px; box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+            border: 1px solid rgba(255,255,255,0.05); position: relative; overflow-y: auto; max-height: 95vh;
+        }
+
+        .screen { display: none; animation: slideIn 0.22s ease forwards; }
+        .screen.active { display: block; }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* --- Cabecera principal --- */
+        .top-bar {
+            display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;
+        }
+        .top-bar h1 { font-size: 1.15rem; letter-spacing: 0.02em; }
+        .icon-btn {
+            background: var(--bg-input); border: 1px solid rgba(255,255,255,0.06);
+            color: var(--text-main); width: 38px; height: 38px; border-radius: 12px;
+            display: flex; align-items: center; justify-content: center; cursor: pointer;
+            font-size: 1.05rem; transition: transform 0.1s;
+        }
+        .icon-btn:active { transform: scale(0.9); }
+
+        .status-banner {
+            font-size: 0.75rem; padding: 10px 12px; border-radius: 12px; margin-bottom: 14px;
+            background: var(--bg-input); color: var(--color-medium); text-align: center; cursor: pointer;
+            border: 1px dashed var(--color-medium);
+        }
+
+        /* --- Calendario --- */
+        .calendar-header {
+            display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;
+        }
+        .nav-btn {
+            background: var(--bg-input); border: 1px solid rgba(255,255,255,0.05);
+            color: var(--text-main); font-size: 1.1rem; width: 36px; height: 36px;
+            border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center;
+        }
+        .nav-btn:active { transform: scale(0.9); }
+
+        .calendar-grid {
+            display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; text-align: center;
+        }
+        .calendar-day-name { font-size: 0.72rem; color: var(--text-muted); font-weight: bold; padding-bottom: 6px; }
+
+        .calendar-cell {
+            background: var(--bg-input); aspect-ratio: 1; border-radius: 12px;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            cursor: pointer; position: relative; transition: transform 0.1s; font-weight: 600;
+        }
+        .calendar-cell.empty { background: transparent; cursor: default; }
+        .calendar-cell:not(.empty):active { transform: scale(0.92); }
+        .calendar-cell.today { border: 2px solid var(--accent); }
+
+        .indicator-bar-container {
+            position: absolute; bottom: 6px; left: 6px; right: 6px;
+            display: flex; gap: 2px; height: 3px; border-radius: 2px; overflow: hidden;
+        }
+        .ind-bar { flex: 1; height: 100%; }
+
+        /* --- Pantalla de día --- */
+        .day-header {
+            display: flex; align-items: center; gap: 12px; margin-bottom: 20px;
+        }
+        .day-header .day-title { flex: 1; }
+        .day-title .weekday { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        .day-title .datestr { font-size: 1.25rem; font-weight: 700; }
+
+        /* --- Tarjeta de formulario --- */
+        .card {
+            background: var(--bg-input); border-radius: 16px; padding: 16px; margin-bottom: 16px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .card-title {
+            font-size: 0.78rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.04em; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;
+        }
+
+        .title-event { color: var(--color-event); }
+        .title-task { color: var(--color-task); }
+        .title-note { color: var(--color-note); }
+
+        .card-event { border-left: 4px solid var(--color-event); }
+        .card-task { border-left: 4px solid var(--color-task); }
+        .card-note { border-left: 4px solid var(--color-note); }
+
+        .form-group { margin-bottom: 14px; display: flex; flex-direction: column; gap: 6px; }
+        .form-group:last-child { margin-bottom: 0; }
+        label { font-size: 0.78rem; font-weight: 600; color: var(--text-muted); }
+        input, select, textarea {
+            background: var(--bg-card); border: 1px solid rgba(255,255,255,0.06);
+            color: var(--text-main); padding: 11px 12px; border-radius: 10px; outline: none; font-size: 0.95rem;
+        }
+        textarea { resize: vertical; min-height: 70px; font-family: inherit; }
+
+        .priority-chips { display: flex; gap: 8px; }
+        .priority-chip {
+            flex: 1; padding: 10px 6px; border-radius: 10px; text-align: center; font-size: 0.78rem;
+            font-weight: 700; cursor: pointer; border: 2px solid transparent; color: #1a1008;
+            opacity: 0.55; transition: opacity 0.15s, transform 0.1s;
+        }
+        .priority-chip.selected { opacity: 1; border-color: rgba(255,255,255,0.5); }
+        .priority-chip:active { transform: scale(0.95); }
+        .chip-low { background: var(--color-low); }
+        .chip-medium { background: var(--color-medium); }
+        .chip-high { background: var(--color-high); }
+
+        .btn {
+            padding: 13px; border-radius: 12px; border: none; font-weight: 700;
+            font-size: 0.95rem; cursor: pointer; text-align: center; width: 100%; transition: transform 0.1s;
+        }
+        .btn:active { transform: scale(0.97); }
+        .btn-primary { background: var(--accent); color: var(--bg-input); font-weight: 800; }
+        .btn-event { background: var(--color-event); color: #020617; }
+        .btn-task { background: var(--color-task); color: #020617; }
+        .btn-secondary { background: transparent; color: var(--text-muted); border: 1px solid rgba(255,255,255,0.1); }
+        .btn-small { padding: 8px 12px; font-size: 0.82rem; border-radius: 8px; width: auto; }
+
+        .event-list-title {
+            font-size: 0.78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;
+            letter-spacing: 0.04em; margin: 20px 0 10px 2px;
+        }
+        .empty-hint {
+            font-size: 0.85rem; color: var(--text-muted); text-align: center; padding: 18px 8px;
+            background: var(--bg-input); border-radius: 14px; border: 1px dashed rgba(255,255,255,0.08);
+        }
+
+        .event-card {
+            background: var(--bg-input); padding: 13px 14px; border-radius: 14px; margin-bottom: 10px;
+            display: flex; align-items: flex-start; gap: 12px; border: 1px solid rgba(255,255,255,0.04);
+        }
+        .event-dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
+        .event-info { flex: 1; min-width: 0; }
+        .event-time { font-size: 0.72rem; color: var(--accent); font-weight: 700; }
+        .event-title-txt { font-size: 0.92rem; font-weight: 600; margin-top: 1px; }
+        .event-geo { font-size: 0.72rem; color: var(--text-muted); margin-top: 3px; }
+        .event-del {
+            background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1rem;
+            padding: 2px 4px; flex-shrink: 0;
+        }
+
+        /* --- Ajustes y Mapa --- */
+        .settings-section { margin-bottom: 22px; }
+        .settings-row {
+            display: flex; justify-content: space-between; align-items: center; gap: 12px;
+            padding: 12px 2px; border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .settings-row:last-child { border-bottom: none; }
+        .settings-row-label { font-size: 0.9rem; font-weight: 600; }
+        .settings-row-sub { font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; }
+
+        .theme-dots { display: flex; gap: 10px; }
+        .theme-dot {
+            width: 26px; height: 26px; border-radius: 50%; cursor: pointer; border: 2px solid transparent;
+        }
+        .theme-dot.active { border-color: var(--text-main); }
+
+        .switch { position: relative; width: 44px; height: 26px; flex-shrink: 0; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute; cursor: pointer; inset: 0; background: var(--bg-card);
+            border: 1px solid rgba(255,255,255,0.1); border-radius: 999px; transition: 0.2s;
+        }
+        .slider::before {
+            content: ""; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px;
+            background: var(--text-muted); border-radius: 50%; transition: 0.2s;
+        }
+        .switch input:checked + .slider { background: var(--accent); }
+        .switch input:checked + .slider::before { transform: translateX(18px); background: var(--bg-input); }
+
+        .search-box { display: flex; gap: 8px; margin-top: 8px; }
+        .search-box input { flex: 1; }
+
+        .todo-item {
+            display: flex; align-items: center; gap: 10px; background: var(--bg-card);
+            padding: 10px; border-radius: 10px; margin-bottom: 6px; font-size: 0.88rem;
+        }
+        .todo-item.done span { text-decoration: line-through; opacity: 0.5; }
+
+        /* Estilos del Contenedor del Mapa Modal */
+        #map-modal {
+            display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+            z-index: 9999; padding: 20px; flex-direction: column; justify-content: center; align-items: center;
+        }
+        #map-container-box {
+            width: 100%; max-width: 440px; height: 380px; border-radius: 16px; overflow: hidden;
+            border: 2px solid var(--accent); margin-bottom: 12px; position: relative;
+        }
+        #map { width: 100%; height: 100%; }
+
+        .map-gps-btn {
+            position: absolute; bottom: 12px; right: 12px; z-index: 1000;
+            background: var(--bg-card); border: 1px solid var(--accent); color: var(--text-main);
+            padding: 8px 12px; border-radius: 10px; font-size: 0.78rem; font-weight: bold; cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+        }
+
+        .version-tag { text-align: center; font-size: 0.7rem; color: var(--text-muted); margin-top: 8px; }
+    </style>
+</head>
+<body class="theme-cafe">
+
+    <div class="app-container">
+
+        <!-- PANTALLA 1: CALENDARIO PRINCIPAL -->
+        <div id="screen-calendar" class="screen active">
+            <div class="top-bar">
+                <h1>TaskMaster</h1>
+                <button class="icon-btn" onclick="changeScreen('settings')" aria-label="Ajustes">⚙️</button>
+            </div>
+
+            <div id="permission-banner" class="status-banner" style="display:none;" onclick="requestPermissions()">
+                Toca aquí para activar notificaciones y alarmas
+            </div>
+
+            <div class="calendar-header">
+                <button class="nav-btn" onclick="changeMonth(-1)">◀</button>
+                <h2 id="calendar-month-year" style="margin:0; color: var(--text-main); font-size: 1.2rem; text-align: center; min-width: 150px;">Julio 2026</h2>
+                <button class="nav-btn" onclick="changeMonth(1)">▶</button>
+            </div>
+
+            <div class="calendar-grid" id="calendar-grid"></div>
+        </div>
+
+        <!-- PANTALLA 2: DETALLE DE DÍA (EVENTOS, TAREAS Y NOTAS) -->
+        <div id="screen-events" class="screen">
+            <div class="day-header">
+                <button class="icon-btn" onclick="changeScreen('calendar')" aria-label="Volver">←</button>
+                <div class="day-title">
+                    <div class="weekday" id="selected-weekday">Día</div>
+                    <div class="datestr" id="selected-date-title">--</div>
+                </div>
+            </div>
+
+            <!-- BLOQUE 1: EVENTOS / ALERTAS (AZUL) -->
+            <div class="card card-event">
+                <div class="card-title title-event">🔵 Nuevo Evento / Alarma</div>
+
+                <div class="form-group">
+                    <label>Título del Evento</label>
+                    <input type="text" id="eventTitle" placeholder="Ej. Inspección / Cita">
+                </div>
+
+                <div class="form-group">
+                    <label>Hora exacta de alerta (Opcional)</label>
+                    <input type="time" id="eventTime">
+                </div>
+
+                <div class="form-group">
+                    <label>Prioridad</label>
+                    <div class="priority-chips" id="priority-chips">
+                        <div class="priority-chip chip-low selected" data-value="low" onclick="selectPriority(this)">Baja</div>
+                        <div class="priority-chip chip-medium" data-value="medium" onclick="selectPriority(this)">Media</div>
+                        <div class="priority-chip chip-high" data-value="high" onclick="selectPriority(this)">Alta</div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Alerta de ubicación (geofencing)</label>
+                    <select id="eventLoc" onchange="handleLocSelectChange(this.value)">
+                        <option value="none">Ninguna</option>
+                        <option value="custom_map">📍 Elegir punto libre en el mapa...</option>
+                        <option value="central">Mi Cochera</option>
+                        <option value="casa">Mi Casa</option>
+                        <option value="mercadona">Cualquier Mercadona</option>
+                        <option value="super">Cualquier Supermercado</option>
+                    </select>
+                    <div id="event-custom-coord-status" style="font-size: 0.75rem; color: var(--color-event); display: none; margin-top: 4px;">
+                        📍 Punto personalizado seleccionado
+                    </div>
+                </div>
+
+                <button class="btn btn-event" style="margin-top: 14px;" onclick="saveEvent()">Guardar Evento</button>
+            </div>
+
+            <!-- BLOQUE 2: TAREAS DEL DÍA (VERDE) -->
+            <div class="card card-task">
+                <div class="card-title title-task">🟢 Tareas del Día (To-Do)</div>
+                <div class="search-box" style="margin-bottom: 10px;">
+                    <input type="text" id="day-todo-input" placeholder="Ej. Comprar pan / Llamar...">
+                    <button class="btn btn-task btn-small" onclick="addDayTodo()">Añadir</button>
+                </div>
+                <div id="day-todo-container"></div>
+            </div>
+
+            <!-- BLOQUE 3: NOTAS DEL DÍA (NARANJA) -->
+            <div class="card card-note">
+                <div class="card-title title-note">🟠 Notas Rápida de este día</div>
+                <textarea id="day-notes" placeholder="Anotaciones personales para este día..." oninput="saveDayNotes()"></textarea>
+            </div>
+
+            <div class="event-list-title">Eventos / Alertas programados</div>
+            <div id="current-day-events"></div>
+        </div>
+
+        <!-- PANTALLA 3: AJUSTES Y CONFIGURACIÓN -->
+        <div id="screen-settings" class="screen">
+            <div class="day-header">
+                <button class="icon-btn" onclick="changeScreen('calendar')" aria-label="Volver">←</button>
+                <div class="day-title"><div class="datestr">Ajustes & Configuración</div></div>
+            </div>
+
+            <!-- Ubicaciones mediante Mapa Interactivo -->
+            <div class="settings-section">
+                <div class="card-title" style="margin-left:2px;">📍 Mis lugares de confianza habituales</div>
+                
+                <div class="settings-row">
+                    <div>
+                        <div class="settings-row-label">Mi Cochera</div>
+                        <div id="cochera-status" class="settings-row-sub">Sin guardar</div>
+                    </div>
+                    <button class="btn btn-primary btn-small" onclick="openMapPicker('central')">Seleccionar en el Mapa</button>
+                </div>
+
+                <div class="settings-row">
+                    <div>
+                        <div class="settings-row-label">Mi Casa</div>
+                        <div id="casa-status" class="settings-row-sub">Sin guardar</div>
+                    </div>
+                    <button class="btn btn-primary btn-small" onclick="openMapPicker('casa')">Seleccionar en el Mapa</button>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <div class="card-title" style="margin-left:2px;">Apariencia & Notificaciones</div>
+                <div class="settings-row">
+                    <div class="settings-row-label">Color del calendario</div>
+                    <div class="theme-dots">
+                        <div class="theme-dot active" data-theme="cafe" style="background:#df9a57;" onclick="setTheme('cafe', this)"></div>
+                        <div class="theme-dot" data-theme="gris" style="background:#707070;" onclick="setTheme('gris', this)"></div>
+                        <div class="theme-dot" data-theme="marino" style="background:#38bdf8;" onclick="setTheme('marino', this)"></div>
+                    </div>
+                </div>
+
+                <div class="settings-row">
+                    <div>
+                        <div class="settings-row-label">Sonido Alarma</div>
+                        <div class="settings-row-sub">Pitido al dispararse avisos</div>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="toggle-sound" checked onchange="updateSetting('sound', this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <div class="settings-row">
+                    <div>
+                        <div class="settings-row-label">Notificaciones</div>
+                        <div id="notif-status" class="settings-row-sub">Comprobando…</div>
+                    </div>
+                    <button class="btn btn-primary btn-small" id="btn-activate-notif" onclick="requestPermissions()">Activar</button>
+                </div>
+            </div>
+
+            <div class="version-tag" id="version-tag"></div>
+        </div>
+
+    </div>
+
+    <!-- MODAL MAPA VISUAL INTERACTIVO CON GPS AUTOMÁTICO -->
+    <div id="map-modal">
+        <div style="color:white; margin-bottom: 8px; font-weight: bold; font-size: 0.9rem; text-align: center;">
+            Toca en el mapa para mover el pin a cualquier lugar:
+        </div>
+        <div id="map-container-box">
+            <div id="map"></div>
+            <button class="map-gps-btn" onclick="centerMapOnUserGPS()">🎯 Mi Ubicación GPS</button>
+        </div>
+        <div style="display: flex; gap: 10px; width: 100%; max-width: 440px;">
+            <button class="btn btn-primary" onclick="confirmMapLocation()">Confirmar esta Ubicación</button>
+            <button class="btn btn-secondary" onclick="closeMapPicker()">Cancelar</button>
+        </div>
+    </div>
+
+    <!-- Leaflet JS para soporte del Mapa -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        // medbasha
+        const config = { version: '2.3.0', sysSignature: 'medbasha' };
+
+        let events = JSON.parse(localStorage.getItem('cal_events')) || [];
+        let customLocations = JSON.parse(localStorage.getItem('custom_locations')) || { central: null, casa: null };
+        let appSettings = JSON.parse(localStorage.getItem('app_settings')) || { sound: true, vibration: true };
+        let dayTodos = JSON.parse(localStorage.getItem('day_todos')) || {};
+        let dayNotesData = JSON.parse(localStorage.getItem('day_notes_data')) || {};
+
+        const todayDate = new Date();
+        let currentYear = todayDate.getFullYear();
+        let currentMonth = todayDate.getMonth();
+        let selectedDateStr = '';
+        let selectedPriority = 'low';
+
+        // Variables del mapa Leaflet
+        let leafletMap = null;
+        let mapMarker = null;
+        let activeTargetType = null; 
+        let tempCoords = { lat: 39.9996, lon: 3.8349 };
+        let pendingEventCustomCoords = null; 
+
+        const geofenceZones = {
+            mercadona: [
+                { name: 'Mercadona Ciutadella', lat: 40.0057, lon: 3.8546 },
+                { name: 'Mercadona Centro', lat: 39.9022, lon: 4.2498 }
+            ],
+            super: [
+                { name: 'Mercadona Ciutadella', lat: 40.0057, lon: 3.8546 },
+                { name: 'Eroski', lat: 40.0021, lon: 3.8423 },
+                { name: 'Lidl', lat: 39.9985, lon: 3.8499 }
+            ]
+        };
+
+        let swRegistration = null;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedTheme = localStorage.getItem('app_theme') || 'cafe';
+            document.body.className = 'theme-' + savedTheme;
+            document.querySelectorAll('.theme-dot').forEach(d => {
+                if(d.dataset.theme === savedTheme) d.classList.add('active');
+                else d.classList.remove('active');
+            });
+
+            registerServiceWorker();
+            initCalendar();
+            initSmartTracking();
+            initTimeAlarms();
+            updateLocationUI();
+            updatePermissionBanner();
+            initSettingsUI();
+            document.getElementById('version-tag').innerText = 'TaskMaster v' + config.version;
+        });
+
+        function handleLocSelectChange(val) {
+            if (val === 'custom_map') {
+                openMapPicker('event_custom');
+            } else {
+                pendingEventCustomCoords = null;
+                document.getElementById('event-custom-coord-status').style.display = 'none';
+            }
+        }
+
+        /* --- MAPA INTERACTIVO CON AUTOLOCALIZACIÓN GPS --- */
+        function openMapPicker(type) {
+            activeTargetType = type;
+            document.getElementById('map-modal').style.display = 'flex';
+
+            if (!leafletMap) {
+                leafletMap = L.map('map').setView([tempCoords.lat, tempCoords.lon], 15);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap'
+                }).addTo(leafletMap);
+
+                mapMarker = L.marker([tempCoords.lat, tempCoords.lon], { draggable: true }).addTo(leafletMap);
+
+                leafletMap.on('click', (e) => {
+                    tempCoords = { lat: e.latlng.lat, lon: e.latlng.lng };
+                    mapMarker.setLatLng(e.latlng);
+                });
+
+                mapMarker.on('dragend', () => {
+                    const pos = mapMarker.getLatLng();
+                    tempCoords = { lat: pos.lat, lon: pos.lng };
+                });
+            }
+
+            setTimeout(() => { 
+                leafletMap.invalidateSize(); 
+                centerMapOnUserGPS(); 
+            }, 250);
+        }
+
+        function centerMapOnUserGPS() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(pos => {
+                    const { latitude, longitude } = pos.coords;
+                    tempCoords = { lat: latitude, lon: longitude };
+                    leafletMap.setView([latitude, longitude], 16);
+                    mapMarker.setLatLng([latitude, longitude]);
+                }, () => {
+                    console.log("No se pudo obtener el GPS automático.");
+                }, { enableHighAccuracy: true });
+            }
+        }
+
+        function closeMapPicker() {
+            document.getElementById('map-modal').style.display = 'none';
+        }
+
+        function confirmMapLocation() {
+            if (activeTargetType === 'event_custom') {
+                pendingEventCustomCoords = { lat: tempCoords.lat, lon: tempCoords.lon };
+                const statusDiv = document.getElementById('event-custom-coord-status');
+                statusDiv.innerText = `📍 Punto Fijado (${tempCoords.lat.toFixed(4)}, ${tempCoords.lon.toFixed(4)})`;
+                statusDiv.style.display = 'block';
+            } else if (activeTargetType) {
+                customLocations[activeTargetType] = { lat: tempCoords.lat, lon: tempCoords.lon };
+                localStorage.setItem('custom_locations', JSON.stringify(customLocations));
+                updateLocationUI();
+                alert(`¡Ubicación de ${activeTargetType === 'central' ? 'Cochera' : 'Casa'} guardada con éxito!`);
+            }
+            closeMapPicker();
+        }
+
+        /* --- TAREAS Y NOTAS ASOCIADAS AL DÍA --- */
+        function loadDayData() {
+            document.getElementById('day-notes').value = dayNotesData[selectedDateStr] || '';
+            renderDayTodos();
+        }
+
+        function saveDayNotes() {
+            const txt = document.getElementById('day-notes').value;
+            dayNotesData[selectedDateStr] = txt;
+            localStorage.setItem('day_notes_data', JSON.stringify(dayNotesData));
+        }
+
+        function renderDayTodos() {
+            const container = document.getElementById('day-todo-container');
+            container.innerHTML = '';
+            const list = dayTodos[selectedDateStr] || [];
+
+            list.forEach((todo, idx) => {
+                const div = document.createElement('div');
+                div.className = `todo-item ${todo.done ? 'done' : ''}`;
+                div.innerHTML = `
+                    <input type="checkbox" ${todo.done ? 'checked' : ''} onchange="toggleDayTodo(${idx})">
+                    <span style="flex:1;">${todo.text}</span>
+                    <button class="event-del" onclick="deleteDayTodo(${idx})">✕</button>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function addDayTodo() {
+            const input = document.getElementById('day-todo-input');
+            if (!input.value) return;
+            if (!dayTodos[selectedDateStr]) dayTodos[selectedDateStr] = [];
+            
+            dayTodos[selectedDateStr].push({ text: input.value, done: false });
+            localStorage.setItem('day_todos', JSON.stringify(dayTodos));
+            input.value = '';
+            renderDayTodos();
+        }
+
+        function toggleDayTodo(idx) {
+            dayTodos[selectedDateStr][idx].done = !dayTodos[selectedDateStr][idx].done;
+            localStorage.setItem('day_todos', JSON.stringify(dayTodos));
+            renderDayTodos();
+        }
+
+        function deleteDayTodo(idx) {
+            dayTodos[selectedDateStr].splice(idx, 1);
+            localStorage.setItem('day_todos', JSON.stringify(dayTodos));
+            renderDayTodos();
+        }
+
+        function initSettingsUI() {
+            document.getElementById('toggle-sound').checked = !!appSettings.sound;
+        }
+
+        function updateSetting(key, value) {
+            appSettings[key] = value;
+            localStorage.setItem('app_settings', JSON.stringify(appSettings));
+        }
+
+        function selectPriority(el) {
+            document.querySelectorAll('.priority-chip').forEach(c => c.classList.remove('selected'));
+            el.classList.add('selected');
+            selectedPriority = el.dataset.value;
+        }
+
+        function registerServiceWorker() {
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('sw.js')
+                    .then(reg => { swRegistration = reg; })
+                    .catch(err => console.log('SW no registrado:', err));
+            }
+        }
+
+        function updatePermissionBanner() {
+            const banner = document.getElementById('permission-banner');
+            const notifStatus = document.getElementById('notif-status');
+            const btnActivate = document.getElementById('btn-activate-notif');
+            
+            if (!('Notification' in window)) {
+                banner.style.display = 'block';
+                banner.innerText = 'Este navegador no soporta notificaciones.';
+                if (notifStatus) notifStatus.innerText = 'No soportado';
+                if (btnActivate) btnActivate.disabled = true;
+                return;
+            }
+            if (Notification.permission !== 'granted') {
+                banner.style.display = 'block';
+                if (btnActivate) btnActivate.disabled = false;
+                if (notifStatus) notifStatus.innerText = Notification.permission === 'denied'
+                    ? 'Bloqueadas en navegador'
+                    : 'Pendiente';
+            } else {
+                banner.style.display = 'none';
+                if (notifStatus) notifStatus.innerText = 'Activadas';
+                if (btnActivate) btnActivate.innerText = 'Activo';
+            }
+        }
+
+        function requestPermissions() {
+            if ('Notification' in window) {
+                Notification.requestPermission().then(() => updatePermissionBanner());
+            }
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                const ctx = new AudioContext();
+                ctx.resume();
+            } catch (e) {}
+            if (navigator.vibrate) navigator.vibrate(100);
+        }
+
+        function updateLocationUI() {
+            const cocheraStatus = document.getElementById('cochera-status');
+            const casaStatus = document.getElementById('casa-status');
+            if (customLocations.central) {
+                cocheraStatus.innerText = `Guardada (${customLocations.central.lat.toFixed(4)}, ${customLocations.central.lon.toFixed(4)})`;
+            }
+            if (customLocations.casa) {
+                casaStatus.innerText = `Guardada (${customLocations.casa.lat.toFixed(4)}, ${customLocations.casa.lon.toFixed(4)})`;
+            }
+        }
+
+        function setTheme(themeName, element) {
+            document.body.className = 'theme-' + themeName;
+            document.querySelectorAll('.theme-dot').forEach(d => d.classList.remove('active'));
+            element.classList.add('active');
+            localStorage.setItem('app_theme', themeName);
+        }
+
+        function changeScreen(screen) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById('screen-' + screen).classList.add('active');
+            if (screen === 'settings') {
+                updatePermissionBanner();
+            }
+        }
+
+        function changeMonth(direction) {
+            currentMonth += direction;
+            if (currentMonth < 0) { currentMonth = 11; currentYear--; }
+            else if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+            initCalendar();
+        }
+
+        function initCalendar() {
+            const grid = document.getElementById('calendar-grid');
+            grid.innerHTML = '';
+
+            const months = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+            document.getElementById('calendar-month-year').innerText = `${months[currentMonth]} ${currentYear}`;
+
+            const dayNames = ['D','L','M','X','J','V','S'];
+            dayNames.forEach(name => {
+                const el = document.createElement('div');
+                el.className = 'calendar-day-name';
+                el.innerText = name;
+                grid.appendChild(el);
+            });
+
+            const firstDayIndex = new Date(currentYear, currentMonth, 1).getDay();
+            const totalDays = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+            for (let x = 0; x < firstDayIndex; x++) {
+                const emptyCell = document.createElement('div');
+                emptyCell.className = 'calendar-cell empty';
+                grid.appendChild(emptyCell);
+            }
+
+            for (let i = 1; i <= totalDays; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'calendar-cell';
+                cell.innerText = i;
+
+                const dateKey = `${currentYear}-${String(currentMonth+1).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
+
+                if (currentYear === todayDate.getFullYear() && currentMonth === todayDate.getMonth() && i === todayDate.getDate()) {
+                    cell.classList.add('today');
+                }
+
+                const dayEvents = events.filter(e => e.date === dateKey);
+                if (dayEvents.length > 0) {
+                    const barContainer = document.createElement('div');
+                    barContainer.className = 'indicator-bar-container';
+                    dayEvents.slice(0, 3).forEach(ev => {
+                        const bar = document.createElement('div');
+                        bar.className = 'ind-bar';
+                        bar.style.backgroundColor = `var(--color-${ev.priority})`;
+                        barContainer.appendChild(bar);
+                    });
+                    cell.appendChild(barContainer);
+                }
+
+                cell.onclick = () => openDate(dateKey);
+                grid.appendChild(cell);
+            }
+        }
+
+        function formatDateHuman(dateKey) {
+            const [y, m, d] = dateKey.split('-').map(Number);
+            const dateObj = new Date(y, m - 1, d);
+            const weekdays = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+            const months = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+            return {
+                weekday: weekdays[dateObj.getDay()],
+                readable: `${d} de ${months[m - 1]}`
+            };
+        }
+
+        function openDate(dateKey) {
+            selectedDateStr = dateKey;
+            const { weekday, readable } = formatDateHuman(dateKey);
+            document.getElementById('selected-weekday').innerText = weekday;
+            document.getElementById('selected-date-title').innerText = readable;
+            selectedPriority = 'low';
+            document.querySelectorAll('.priority-chip').forEach(c => c.classList.remove('selected'));
+            document.querySelector('.priority-chip[data-value="low"]').classList.add('selected');
+            
+            pendingEventCustomCoords = null;
+            document.getElementById('eventLoc').value = 'none';
+            document.getElementById('event-custom-coord-status').style.display = 'none';
+
+            loadDayData();
+            renderDayEvents();
+            changeScreen('events');
+        }
+
+        function saveEvent() {
+            const title = document.getElementById('eventTitle').value;
+            const time = document.getElementById('eventTime').value;
+            const loc = document.getElementById('eventLoc').value;
+
+            if (!title) return alert("Rellena el título del evento.");
+
+            let customCoordsToSave = null;
+            if (loc === 'custom_map') {
+                if (!pendingEventCustomCoords) return alert("Selecciona un punto en el mapa primero.");
+                customCoordsToSave = pendingEventCustomCoords;
+            }
+
+            events.push({
+                id: 'ev_' + Date.now(),
+                date: selectedDateStr,
+                title, time: time || '--:--', priority: selectedPriority, loc,
+                customCoords: customCoordsToSave,
+                notified: false,
+                alarmFired: false
+            });
+
+            localStorage.setItem('cal_events', JSON.stringify(events));
+            renderDayEvents();
+            initCalendar();
+
+            document.getElementById('eventTitle').value = '';
+            document.getElementById('eventTime').value = '';
+            document.getElementById('eventLoc').value = 'none';
+            pendingEventCustomCoords = null;
+            document.getElementById('event-custom-coord-status').style.display = 'none';
+        }
+
+        function renderDayEvents() {
+            const container = document.getElementById('current-day-events');
+            container.innerHTML = '';
+            const dayEvents = events.filter(e => e.date === selectedDateStr).sort((a,b) => a.time.localeCompare(b.time));
+
+            if (dayEvents.length === 0) {
+                container.innerHTML = '<div class="empty-hint">Sin eventos programados.</div>';
+                return;
+            }
+
+            const labelMap = { central: 'Mi Cochera', casa: 'Mi Casa', mercadona: 'Mercadona', super: 'Supermercado', custom_map: 'Punto del Mapa' };
+
+            dayEvents.forEach(ev => {
+                const div = document.createElement('div');
+                div.className = 'event-card';
+
+                let geoLine = '';
+                if (ev.loc !== 'none') {
+                    geoLine = `<div class="event-geo">📍 ${labelMap[ev.loc] || ev.loc}</div>`;
+                }
+
+                div.innerHTML = `
+                    <div class="event-dot" style="background:var(--color-${ev.priority});"></div>
+                    <div class="event-info">
+                        <div class="event-time">${ev.time !== '--:--' ? ev.time : 'Solo por Ubicación'}</div>
+                        <div class="event-title-txt">${ev.title}</div>
+                        ${geoLine}
+                    </div>
+                    <button class="event-del" onclick="deleteEvent('${ev.id}')" aria-label="Eliminar">✕</button>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function deleteEvent(id) {
+            events = events.filter(e => e.id !== id);
+            localStorage.setItem('cal_events', JSON.stringify(events));
+            renderDayEvents();
+            initCalendar();
+        }
+
+        function playAlertSound() {
+            if (!appSettings.sound) return;
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContext) return;
+                const ctx = new AudioContext();
+                const playBeep = (delay, frequency, duration) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(frequency, ctx.currentTime + delay);
+                    gain.gain.setValueAtTime(0.3, ctx.currentTime + delay);
+                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + delay + duration);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(ctx.currentTime + delay);
+                    osc.stop(ctx.currentTime + delay + duration);
+                };
+                playBeep(0, 880, 0.15);
+                playBeep(0.2, 880, 0.25);
+            } catch (e) {
+                console.log("Audio bloqueado temporalmente.");
+            }
+        }
+
+        function triggerAlarm(title, body, tag) {
+            playAlertSound();
+
+            if (appSettings.vibration && navigator.vibrate) {
+                navigator.vibrate([200, 100, 200, 100, 400]);
+            }
+
+            if (swRegistration && swRegistration.showNotification) {
+                swRegistration.showNotification(title, {
+                    body,
+                    icon: 'icon-192.png',
+                    badge: 'icon-192.png',
+                    vibrate: appSettings.vibration ? [200, 100, 200, 100, 400] : [],
+                    tag,
+                    requireInteraction: true
+                });
+            } else {
+                triggerNotification(body, title);
+            }
+        }
+
+        /* --- ALGORITMO INTELIGENTE CON RADIO ADAPTATIVO POR VELOCIDAD --- */
+        function initSmartTracking() {
+            if (!navigator.geolocation) return;
+            setInterval(() => {
+                navigator.geolocation.getCurrentPosition(pos => {
+                    const { latitude, longitude, speed } = pos.coords;
+                    const currentSpeedKmh = speed ? (speed * 3.6) : 30;
+
+                    // Ajuste de radio inteligente según el modo de desplazamiento
+                    // En conducción (>25 km/h) se necesita mayor margen de aviso (~500m - 1km)
+                    const triggerDistanceKm = currentSpeedKmh > 25 ? 0.60 : 0.15; 
+
+                    events.forEach(ev => {
+                        if (ev.loc === 'none' || ev.notified) return;
+
+                        let locationsToCheck = [];
+                        if (ev.loc === 'custom_map' && ev.customCoords) {
+                            locationsToCheck = [{ name: 'Lugar Personalizado', lat: ev.customCoords.lat, lon: ev.customCoords.lon }];
+                        } else if (ev.loc === 'central' && customLocations.central) {
+                            locationsToCheck = [{ name: 'Tu Cochera', lat: customLocations.central.lat, lon: customLocations.central.lon }];
+                        } else if (ev.loc === 'casa' && customLocations.casa) {
+                            locationsToCheck = [{ name: 'Tu Casa', lat: customLocations.casa.lat, lon: customLocations.casa.lon }];
+                        } else {
+                            locationsToCheck = geofenceZones[ev.loc] || [];
+                        }
+
+                        locationsToCheck.forEach(place => {
+                            if (ev.notified) return;
+                            const distanceKm = calculateDistance(latitude, longitude, place.lat, place.lon);
+                            const timeToArrivalMinutes = (distanceKm / currentSpeedKmh) * 60;
+
+                            if (timeToArrivalMinutes <= 5 || distanceKm < triggerDistanceKm) {
+                                triggerAlarm('TaskMaster Proximidad', `Estás llegando a ${place.name}. Tarea: ${ev.title}`, 'geo_' + ev.id);
+                                ev.notified = true;
+                                localStorage.setItem('cal_events', JSON.stringify(events));
+                            }
+                        });
+                    });
+                });
+            }, 25000);
+        }
+
+        function initTimeAlarms() {
+            checkTimeAlarms();
+            setInterval(checkTimeAlarms, 20000);
+        }
+
+        function checkTimeAlarms() {
+            const now = new Date();
+            const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+            const currentHHMM = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+
+            let changed = false;
+            events.forEach(ev => {
+                if (ev.alarmFired || ev.time === '--:--') return;
+                if (ev.date === todayStr && ev.time === currentHHMM) {
+                    triggerAlarm('TaskMaster', ev.title, 'time_' + ev.id);
+                    ev.alarmFired = true;
+                    changed = true;
+                }
+            });
+            if (changed) localStorage.setItem('cal_events', JSON.stringify(events));
+        }
+
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        }
+
+        function triggerNotification(text, title) {
+            if (Notification.permission === 'granted') {
+                new Notification(title || "TaskMaster Proximidad", { body: text, icon: 'icon-192.png' });
+            }
+        }
+    </script>
+</body>
+</html>
